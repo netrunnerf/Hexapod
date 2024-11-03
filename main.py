@@ -12,7 +12,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QImage
-
+import numpy as np
+from PyQt5.QtCore import QDateTime
 # Import OpenCV for camera feed
 import cv2
 
@@ -421,6 +422,26 @@ class ControlTab(QWidget):
 
         layout.addLayout(camera_control_layout)
 
+        # Capture Photo and Record Video Buttons
+        media_control_layout = QHBoxLayout()
+        self.capture_photo_button = QPushButton("Capture Photo")
+        self.record_video_button = QPushButton("Start Recording")
+
+        # Add icons to media control buttons
+        self.capture_photo_button.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
+        self.record_video_button.setIcon(self.style().standardIcon(QStyle.SP_DialogYesButton))
+
+        # Set fixed sizes for media control buttons
+        self.capture_photo_button.setFixedSize(150, 40)
+        self.record_video_button.setFixedSize(150, 40)
+
+        media_control_layout.addStretch()
+        media_control_layout.addWidget(self.capture_photo_button)
+        media_control_layout.addWidget(self.record_video_button)
+        media_control_layout.addStretch()
+
+        layout.addLayout(media_control_layout)
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -438,6 +459,10 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.setup_connections()
         self.update_plot()
+
+        # Video recording attributes
+        self.is_recording = False
+        self.video_writer = None
 
     def init_ui(self):
         # Main widget and layout
@@ -527,6 +552,11 @@ class MainWindow(QMainWindow):
         self.control_tab.right_button.clicked.connect(self.turn_right)
         self.control_tab.stop_button.clicked.connect(self.stop_movement)
 
+        # Media control buttons
+        self.control_tab.capture_photo_button.clicked.connect(self.capture_photo)
+        self.control_tab.record_video_button.clicked.connect(self.toggle_video_recording)
+
+
     # Simulation Tab Methods
     def on_dimension_changed(self):
         values = [self.simulation_tab.dim_sliders[label].value() for label in ['Front', 'Middle', 'Side', 'coxa', 'Femur', 'Tibia']]
@@ -604,7 +634,7 @@ class MainWindow(QMainWindow):
 
     # Control Tab Methods
     def start_camera(self):
-        self.camera_thread = CameraThread()
+        self.camera_thread = CameraThread(width=640, height=480)
         self.camera_thread.frame_updated.connect(self.update_camera_feed)
         self.camera_thread.start()
         self.control_tab.start_camera_button.setEnabled(False)
@@ -624,6 +654,55 @@ class MainWindow(QMainWindow):
             self.control_tab.camera_label.height(),
             Qt.KeepAspectRatio
         ))
+        if self.is_recording and self.video_writer is not None:
+            # Convert QImage to OpenCV format
+            image = image.convertToFormat(QImage.Format_RGB888)
+            width = image.width()
+            height = image.height()
+            ptr = image.bits()
+            ptr.setsize(image.byteCount())
+            arr = np.array(ptr).reshape(height, width, 3)
+            # Convert RGB to BGR
+            frame = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            self.video_writer.write(frame)
+            
+    def capture_photo(self):
+        if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
+            # Capture the current pixmap from camera_label
+            pixmap = self.control_tab.camera_label.pixmap()
+            if pixmap:
+                # Save the pixmap as an image file
+                timestamp = QDateTime.currentDateTime().toString("yyyyMMdd_HHmmss")
+                filename = f"photo_{timestamp}.png"
+                pixmap.save(filename)
+                print(f"Photo saved as {filename}")
+        else:
+            print("Camera is not running.")
+
+    def toggle_video_recording(self):
+        if not self.is_recording:
+            # Start recording
+            timestamp = QDateTime.currentDateTime().toString("yyyyMMdd_HHmmss")
+            filename = f"video_{timestamp}.avi"
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            self.video_writer = cv2.VideoWriter(filename, fourcc, 20.0, (640, 480))
+            if not self.video_writer.isOpened():
+                print("Failed to open video writer.")
+                self.video_writer = None
+                return
+            self.is_recording = True
+            self.control_tab.record_video_button.setText("Stop Recording")
+            self.control_tab.record_video_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+            print(f"Recording started: {filename}")
+        else:
+            # Stop recording
+            self.is_recording = False
+            if self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+                print("Recording stopped and saved.")
+            self.control_tab.record_video_button.setText("Start Recording")
+            self.control_tab.record_video_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
 
     # Hexapod Control Methods
     def move_forward(self):
