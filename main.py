@@ -79,10 +79,10 @@ def draw_robot(robot: Hexapod, ax):
     support_x = [p.x for p in robot.ground_contact_points.values()]
     support_y = [p.y for p in robot.ground_contact_points.values()]
     support_z = [p.z - 0.01 for p in robot.ground_contact_points.values()]
-    if support_x and support_y and support_z:
-        support_verts = list(zip(support_x, support_y, support_z))
-        support_poly = Poly3DCollection([support_verts], color=body_color, alpha=0.2)
-        ax.add_collection3d(support_poly)
+    # if support_x and support_y and support_z:
+    #     support_verts = list(zip(support_x, support_y, support_z))
+    #     support_poly = Poly3DCollection([support_verts], color=body_color, alpha=0.2)
+    #     ax.add_collection3d(support_poly)
 
     # Plot the ground
     s = float(conf.get('ground', 'size', fallback='20'))
@@ -106,13 +106,17 @@ def play_robot_walking(robot: Hexapod, t):
 class CameraThread(QThread):
     frame_updated = pyqtSignal(QImage)
 
-    def __init__(self, camera_index=0):
+    def __init__(self, camera_index=0, width=640, height=480):
         super().__init__()
         self.camera_index = camera_index
+        self.width = width
+        self.height = height
         self.running = False
 
     def run(self):
         self.cap = cv2.VideoCapture(self.camera_index)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)  # Set frame width
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)  # Set frame height
         self.running = True
         while self.running:
             ret, frame = self.cap.read()
@@ -351,12 +355,15 @@ class ControlTab(QWidget):
         self.camera_label = QLabel("Camera Output")
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setStyleSheet("border: 1px solid black;")
-        layout.addWidget(self.camera_label)
+        self.camera_label.setFixedSize(640, 480)  # Set fixed width and height
+        layout.addWidget(self.camera_label, alignment=Qt.AlignCenter)
 
-        # Control Buttons
+        # Control Buttons Group
         control_group = QGroupBox("Hexapod Controls")
         control_layout = QHBoxLayout()
         control_group.setLayout(control_layout)
+        control_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        control_group.setFixedHeight(100)  # Adjusted height for control buttons
 
         self.forward_button = QPushButton("Forward")
         self.backward_button = QPushButton("Backward")
@@ -364,18 +371,32 @@ class ControlTab(QWidget):
         self.right_button = QPushButton("Right")
         self.stop_button = QPushButton("Stop")
 
-        # Optional: Add icons to control buttons
+        # Add icons to control buttons
         self.forward_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowUp))
         self.backward_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowDown))
         self.left_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowLeft))
         self.right_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowRight))
         self.stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
 
+        # Set size policies to prevent buttons from expanding
+        buttons = [
+            self.forward_button,
+            self.backward_button,
+            self.left_button,
+            self.right_button,
+            self.stop_button
+        ]
+        for btn in buttons:
+            btn.setFixedSize(100, 40)  # Set fixed size for each button
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        control_layout.addStretch()
         control_layout.addWidget(self.forward_button)
         control_layout.addWidget(self.backward_button)
         control_layout.addWidget(self.left_button)
         control_layout.addWidget(self.right_button)
         control_layout.addWidget(self.stop_button)
+        control_layout.addStretch()
 
         layout.addWidget(control_group)
 
@@ -384,9 +405,22 @@ class ControlTab(QWidget):
         self.start_camera_button = QPushButton("Start Camera")
         self.stop_camera_button = QPushButton("Stop Camera")
         self.stop_camera_button.setEnabled(False)
+
+        # Add icons to camera control buttons
+        self.start_camera_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.stop_camera_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+
+        # Set fixed sizes for camera control buttons
+        self.start_camera_button.setFixedSize(120, 40)
+        self.stop_camera_button.setFixedSize(120, 40)
+
+        camera_control_layout.addStretch()
         camera_control_layout.addWidget(self.start_camera_button)
         camera_control_layout.addWidget(self.stop_camera_button)
+        camera_control_layout.addStretch()
+
         layout.addLayout(camera_control_layout)
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
