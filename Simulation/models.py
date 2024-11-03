@@ -6,8 +6,8 @@ from matplotlib.patches import Polygon
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial.transform import Rotation as R
 
-from constant import *
-from mathematics import *
+from .constant import *
+from .mathematics import *
 
 class Body:
     #       |-f-|
